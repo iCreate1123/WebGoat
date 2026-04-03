@@ -14,8 +14,36 @@ env:
   SNYK_CACHE_REV: "1"
 
 jobs:
-  snyk-cached:
+  prepare-snyk-cli:
+    name: Prepare cached Snyk CLI
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Restore cached Snyk CLI
+        id: cache-snyk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/snyk-cli
+          key: ${{ runner.os }}-snyk-cli-${{ env.SNYK_CACHE_REV }}
+          restore-keys: |
+            ${{ runner.os }}-snyk-cli-
+
+      - name: Download Snyk CLI if not cached
+        if: steps.cache-snyk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/snyk-cli
+          curl --compressed -L https://downloads.snyk.io/cli/stable/snyk-linux -o ~/.cache/snyk-cli/snyk
+          chmod +x ~/.cache/snyk-cli/snyk
+
+      - name: Verify cached binary exists
+        run: |
+          test -x ~/.cache/snyk-cli/snyk
+          ~/.cache/snyk-cli/snyk --version
+
+  snyk-scan:
+    name: Run Snyk scans
+    runs-on: ubuntu-latest
+    needs: prepare-snyk-cli
 
     steps:
       - name: Checkout
@@ -37,14 +65,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-snyk-cli-
 
-      - name: Download Snyk CLI if not cached
-        run: |
-          mkdir -p ~/.cache/snyk-cli
-          if [ ! -x ~/.cache/snyk-cli/snyk ]; then
-            curl --compressed -L https://downloads.snyk.io/cli/stable/snyk-linux -o ~/.cache/snyk-cli/snyk
-            chmod +x ~/.cache/snyk-cli/snyk
-          fi
-          echo "$HOME/.cache/snyk-cli" >> $GITHUB_PATH
+      - name: Add Snyk CLI to PATH
+        run: echo "$HOME/.cache/snyk-cli" >> $GITHUB_PATH
 
       - name: Verify Snyk CLI
         run: snyk --version
